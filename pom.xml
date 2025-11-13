@@ -9,13 +9,14 @@
   <artifactId>sqlserver-to-postgres-cdc</artifactId>
   <version>1.0.0</version>
   <name>sqlserver-to-postgres-cdc</name>
-  <description>Spring Boot + Flink CDC 3.5.0: Sync SQL Server to PostgreSQL</description>
+  <description>Spring Boot + Flink CDC (DataStream 2.4.1): Sync SQL Server to PostgreSQL</description>
 
   <properties>
     <java.version>17</java.version>
     <spring-boot.version>3.3.5</spring-boot.version>
-    <flink.version>1.18.1</flink.version>
-    <flink.cdc.version>3.5.0</flink.cdc.version>
+    <!-- Align with Flink CDC 2.4.1 -->
+    <flink.version>1.17.1</flink.version>
+    <flink.cdc.version>2.4.1</flink.cdc.version>
     <mybatis.plus.version>3.5.6</mybatis.plus.version>
   </properties>
 
@@ -62,13 +63,12 @@
       <version>${flink.version}</version>
     </dependency>
 
-    <!-- Flink CDC 连接器（SQL Server） -->
+    <!-- Flink CDC DataStream 连接器（2.4.1） -->
     <dependency>
       <groupId>com.ververica</groupId>
       <artifactId>flink-connector-sqlserver-cdc</artifactId>
       <version>${flink.cdc.version}</version>
     </dependency>
-    <!-- Debezium JSON 反序列化（CDC 事件 JSON） -->
     <dependency>
       <groupId>com.ververica</groupId>
       <artifactId>flink-connector-debezium</artifactId>

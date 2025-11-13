@@ -1,0 +1,23 @@
+# Maven
+/target/
+/.dep/
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+
+# Flink checkpoints & savepoints (local)
+/tmp/flink-checkpoints/
+/tmp/flink-savepoints/

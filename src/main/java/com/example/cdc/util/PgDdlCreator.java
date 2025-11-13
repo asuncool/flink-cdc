@@ -7,6 +7,9 @@ import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * 从 SQL Server 元数据读取表结构（按字段白名单），在 Postgres 自动建表（含主键）。
+ */
 @Slf4j
 public class PgDdlCreator {
 
@@ -31,6 +34,7 @@ public class PgDdlCreator {
 
     DatabaseMetaData meta = mssql.getMetaData();
 
+    // 源表所有列的元数据
     Map<String, ColumnDef> allCols = new LinkedHashMap<>();
     try (ResultSet rs = meta.getColumns(srcDb, srcSchema, srcTable, "%")) {
       while (rs.next()) {
@@ -44,6 +48,7 @@ public class PgDdlCreator {
       }
     }
 
+    // 主键列（保持顺序）
     LinkedHashSet<String> pkCols = new LinkedHashSet<>();
     try (ResultSet rs = meta.getPrimaryKeys(srcDb, srcSchema, srcTable)) {
       Map<Short, String> seqToCol = new TreeMap<>();
@@ -59,15 +64,17 @@ public class PgDdlCreator {
       pkCols.addAll(primaryKeysOverride);
     }
 
+    // 选用列：优先字段白名单；否则全量列
     List<ColumnItem> selected = (columns == null || columns.isEmpty())
         ? allCols.keySet().stream().map(c -> {
-          ColumnItem item = new ColumnItem();
-          item.setName(c);
-          item.setAlias(c);
-          return item;
-        }).toList()
+            ColumnItem item = new ColumnItem();
+            item.setName(c);
+            item.setAlias(c);
+            return item;
+          }).toList()
         : columns;
 
+    // 生成列定义
     List<String> columnDefs = new ArrayList<>();
     for (ColumnItem c : selected) {
       String srcName = c.getName();
@@ -84,7 +91,32 @@ public class PgDdlCreator {
       columnDefs.add(quoteIdent(tgtName) + " " + pgType + nullable);
     }
 
+    // 主键子句
     String pkClause = "";
     if (!pkCols.isEmpty()) {
       String pk = pkCols.stream().map(PgDdlCreator::quoteIdent).collect(Collectors.joining(", "));
-      pkClause = 
+      pkClause = ", PRIMARY KEY (" + pk + ")";
+    } else {
+      log.warn("No primary key detected/specified for {}.{}, upsert/delete may not work.", tgtSchema, tgtTable);
+    }
+
+    // 整体 DDL
+    String ddl = String.format(
+        "CREATE TABLE %s.%s (\n  %s%s\n)",
+        quoteIdent(tgtSchema), quoteIdent(tgtTable),
+        String.join(",\n  ", columnDefs),
+        pkClause
+    );
+
+    try (Statement st = pg.createStatement()) {
+      st.execute(ddl);
+      log.info("Created target table {}.{} with DDL:\n{}", tgtSchema, tgtTable, ddl);
+    }
+  }
+
+  private static boolean existsTable(Connection pg, String schema, String table) throws SQLException {
+    String sql = """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = ? AND table_name = ?
+        "

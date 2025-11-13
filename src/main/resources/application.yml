@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: sqlserver-to-postgres-cdc
+
+cdc:
+  source:
+    hostname: 127.0.0.1
+    port: 1433
+    database: appdb
+    username: sa
+    password: "YourStrong!Passw0rd"
+    schema: dbo
+    debezium:
+      include.schema.changes: "false"
+      decimal.handling.mode: "string"
+      binary.handling.mode: "base64"
+
+  sink:
+    hostname: 127.0.0.1
+    port: 5432
+    database: appdb
+    username: postgres
+    password: postgres
+    schema: public
+
+  checkpoint:
+    intervalMs: 60000
+    storage: "file:///tmp/flink-checkpoints"
+    retention: 2
+
+  tables:
+    - sourceDatabase: appdb
+      sourceSchema: dbo
+      sourceTable: Users
+      targetSchema: public
+      targetTable: users
+      primaryKeys: [id]
+      columns:
+        - name: id
+        - name: username
+        - name: email
+        - name: created_at
+          alias: created_at
+          typeOverride: "timestamp"
+    - sourceTable: Orders
+      targetTable: orders
+      primaryKeys: [order_id]
+      columns:
+        - name: order_id
+        - name: user_id
+        - name: amount
+        - name: status
+        - name: updated_at

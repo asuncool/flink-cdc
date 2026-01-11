@@ -119,4 +119,73 @@ public class PgDdlCreator {
         SELECT 1
         FROM information_schema.tables
         WHERE table_schema = ? AND table_name = ?
-        "
+        """;
+    try (PreparedStatement ps = pg.prepareStatement(sql)) {
+      ps.setString(1, schema);
+      ps.setString(2, table);
+      try (ResultSet rs = ps.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
+  private static void ensureSchema(Connection pg, String schema) throws SQLException {
+    String sql = "CREATE SCHEMA IF NOT EXISTS " + quoteIdent(schema);
+    try (Statement st = pg.createStatement()) {
+      st.execute(sql);
+      log.debug("Ensured schema {}", schema);
+    }
+  }
+
+  private static String quoteIdent(String ident) {
+    return "\"" + ident.replace("\"", "\"\"") + "\"";
+  }
+
+  static class ColumnDef {
+    String name;
+    int dataType;
+    String typeName;
+    int columnSize;
+    int decimalDigits;
+    boolean nullable;
+
+    ColumnDef(String name, int dataType, String typeName, int columnSize, int decimalDigits, boolean nullable) {
+      this.name = name;
+      this.dataType = dataType;
+      this.typeName = typeName;
+      this.columnSize = columnSize;
+      this.decimalDigits = decimalDigits;
+      this.nullable = nullable;
+    }
+  }
+
+  static class TypeMapping {
+    public static String mssqlToPg(ColumnDef col) {
+      int jdbcType = col.dataType;
+      String typeName = col.typeName.toLowerCase();
+      return switch (jdbcType) {
+        case Types.BIT, Types.BOOLEAN -> "boolean";
+        case Types.TINYINT, Types.SMALLINT -> "smallint";
+        case Types.INTEGER -> "integer";
+        case Types.BIGINT -> "bigint";
+        case Types.REAL -> "real";
+        case Types.FLOAT, Types.DOUBLE -> "double precision";
+        case Types.DECIMAL, Types.NUMERIC -> "numeric(" + col.columnSize + "," + col.decimalDigits + ")";
+        case Types.CHAR -> "char(" + col.columnSize + ")";
+        case Types.VARCHAR, Types.NVARCHAR, Types.LONGNVARCHAR, Types.LONGVARCHAR ->
+            col.columnSize > 10485760 ? "text" : "varchar(" + col.columnSize + ")";
+        case Types.DATE -> "date";
+        case Types.TIME, Types.TIME_WITH_TIMEZONE -> "time";
+        case Types.TIMESTAMP, Types.TIMESTAMP_WITH_TIMEZONE -> "timestamp";
+        case Types.BINARY, Types.VARBINARY, Types.LONGVARBINARY, Types.BLOB -> "bytea";
+        case Types.CLOB, Types.NCLOB -> "text";
+        default -> {
+          if (typeName.contains("datetime")) yield "timestamp";
+          if (typeName.contains("money")) yield "numeric(19,4)";
+          if (typeName.contains("uniqueidentifier")) yield "uuid";
+          yield "text";
+        }
+      };
+    }
+  }
+}

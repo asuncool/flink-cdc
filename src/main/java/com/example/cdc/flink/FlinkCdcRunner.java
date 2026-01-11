@@ -4,7 +4,7 @@ import com.example.cdc.config.CdcProperties;
 import com.example.cdc.util.JdbcUtils;
 import com.example.cdc.util.PgDdlCreator;
 import com.ververica.cdc.connectors.sqlserver.SqlServerSource;
-import com.ververica.cdc.debezium.JsonDebeziumDeserializationSchema;
+import com.ververica.cdc.debezium.StringDebeziumDeserializationSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -90,21 +90,22 @@ public class FlinkCdcRunner implements CommandLineRunner {
       debeziumProps.setProperty("column.include.list", columnIncludeList);
     }
 
-    SqlServerSource<String> source = SqlServerSource.<String>builder()
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    org.apache.flink.streaming.api.functions.source.SourceFunction<String> sourceFunction = 
+        (org.apache.flink.streaming.api.functions.source.SourceFunction<String>) SqlServerSource.builder()
         .hostname(props.getSource().getHostname())
         .port(props.getSource().getPort())
         .database(props.getSource().getDatabase())
         .tableList(tableList.toArray(new String[0])) // "schema.table"
         .username(props.getSource().getUsername())
         .password(props.getSource().getPassword())
-        .deserializer(new JsonDebeziumDeserializationSchema())
+        .deserializer((com.ververica.cdc.debezium.DebeziumDeserializationSchema) new StringDebeziumDeserializationSchema())
         .debeziumProperties(debeziumProps)
-        .includeSchemaChanges(false)
         .startupOptions(com.ververica.cdc.connectors.base.options.StartupOptions.initial())
         .build();
 
     DataStreamSource<String> stream =
-        env.fromSource(source, WatermarkStrategy.noWatermarks(), "sqlserver-cdc");
+        env.addSource(sourceFunction, "sqlserver-cdc");
 
     // 写入 PostgreSQL（Upsert/Delete）
     stream.addSink(new CdcJsonToPgSink(props));

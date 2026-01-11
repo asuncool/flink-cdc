@@ -1,14 +1,12 @@
 package com.example.cdc.service;
 
 import com.example.cdc.entity.GameList;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import redis.clients.jedis.JedisPooled;
-import redis.clients.jedis.json.Path2;
 import redis.clients.jedis.search.*;
 
 import java.util.ArrayList;
@@ -22,7 +20,6 @@ public class RedisJsonService {
     @Autowired
     private JedisPooled jedisPooled;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Gson gson = new Gson();
 
     private static final String REDIS_KEY_PREFIX = "game:";

@@ -2,16 +2,15 @@ package com.example.cdc.service;
 
 import com.example.cdc.entity.GameList;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPooled;
+import redis.clients.jedis.json.Path2;
 import redis.clients.jedis.search.*;
-import redis.clients.jedis.search.schemafields.SchemaField;
-import redis.clients.jedis.search.schemafields.TextField;
 
-import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,9 +20,10 @@ import java.util.Map;
 public class RedisJsonService {
 
     @Autowired
-    private JedisPool jedisPool;
+    private JedisPooled jedisPooled;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Gson gson = new Gson();
 
     private static final String REDIS_KEY_PREFIX = "game:";
     private static final String INDEX_NAME = "idx:game_list";
@@ -37,28 +37,25 @@ public class RedisJsonService {
      * 创建 Redis Search 索引
      */
     public void createSearchIndex() {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
+            // 尝试删除已存在的索引
             try {
-                // 尝试删除已存在的索引
-                jedis.ftDropIndex(INDEX_NAME);
+                jedisPooled.ftDropIndex(INDEX_NAME);
                 log.info("Dropped existing index: {}", INDEX_NAME);
             } catch (Exception e) {
                 log.debug("Index does not exist or cannot be dropped: {}", e.getMessage());
             }
 
             // 创建新索引，对 name 字段建立全文搜索索引
+            IndexDefinition indexDef = new IndexDefinition(IndexDefinition.Type.JSON)
+                    .setPrefixes(REDIS_KEY_PREFIX);
+
             Schema schema = new Schema()
                     .addTextField("$.name", 1.0)
                     .addTextField("$.description", 0.5)
                     .addTextField("$.category", 0.5);
 
-            IndexDefinition indexDefinition = new IndexDefinition()
-                    .setPrefixes(REDIS_KEY_PREFIX)
-                    .setLanguage(Language.CHINESE); // 支持中文分词
-
-            jedis.ftCreate(INDEX_NAME,
-                    IndexOptions.defaultOptions().setDefinition(indexDefinition),
-                    schema);
+            jedisPooled.ftCreate(INDEX_NAME, IndexOptions.defaultOptions().setDefinition(indexDef), schema);
 
             log.info("Created Redis Search index: {}", INDEX_NAME);
         } catch (Exception e) {
@@ -71,10 +68,10 @@ public class RedisJsonService {
      * 将游戏数据同步到 Redis JSON
      */
     public void syncGameToRedis(GameList game) {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             String key = REDIS_KEY_PREFIX + game.getId();
-            String json = objectMapper.writeValueAsString(game);
-            jedis.jsonSet(key, json);
+            String json = gson.toJson(game);
+            jedisPooled.jsonSetWithEscape(key, json);
             log.info("Synced game to Redis: {}", key);
         } catch (Exception e) {
             log.error("Failed to sync game to Redis: {}", game.getId(), e);
@@ -97,18 +94,20 @@ public class RedisJsonService {
      */
     public List<Map<String, Object>> fuzzySearchByName(String name) {
         List<Map<String, Object>> results = new ArrayList<>();
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             // 使用模糊搜索语法，* 表示通配符
-            String queryStr = String.format("@\\$.name:*%s*", name);
-            Query query = new Query(queryStr).returnFields("$");
+            String queryStr = String.format("@\\$.name:*%s*", escapeLuceneSpecialChars(name));
+            Query query = new Query(queryStr);
 
-            SearchResult searchResult = jedis.ftSearch(INDEX_NAME, query);
+            SearchResult searchResult = jedisPooled.ftSearch(INDEX_NAME, query);
 
             for (Document doc : searchResult.getDocuments()) {
-                String jsonStr = doc.getString("$");
-                @SuppressWarnings("unchecked")
-                Map<String, Object> gameMap = objectMapper.readValue(jsonStr, Map.class);
-                results.add(gameMap);
+                Object jsonObj = doc.get("$");
+                if (jsonObj != null) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> gameMap = gson.fromJson(jsonObj.toString(), Map.class);
+                    results.add(gameMap);
+                }
             }
 
             log.info("Found {} games matching name: {}", results.size(), name);
@@ -120,12 +119,26 @@ public class RedisJsonService {
     }
 
     /**
+     * Escape Lucene special characters
+     */
+    private String escapeLuceneSpecialChars(String input) {
+        if (input == null) return "";
+        // Characters that need to be escaped in Lucene queries
+        String[] specialChars = {"\\", "+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "~", "?", ":"};
+        String result = input;
+        for (String special : specialChars) {
+            result = result.replace(special, "\\" + special);
+        }
+        return result;
+    }
+
+    /**
      * 删除 Redis 中的游戏数据
      */
     public void deleteGameFromRedis(Long id) {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             String key = REDIS_KEY_PREFIX + id;
-            jedis.del(key);
+            jedisPooled.del(key);
             log.info("Deleted game from Redis: {}", key);
         } catch (Exception e) {
             log.error("Failed to delete game from Redis: {}", id, e);
@@ -137,11 +150,11 @@ public class RedisJsonService {
      * 获取 Redis 中的游戏数据
      */
     public GameList getGameFromRedis(Long id) {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             String key = REDIS_KEY_PREFIX + id;
-            String json = jedis.jsonGet(key);
+            Object json = jedisPooled.jsonGet(key);
             if (json != null) {
-                return objectMapper.readValue(json, GameList.class);
+                return gson.fromJson(json.toString(), GameList.class);
             }
             return null;
         } catch (Exception e) {

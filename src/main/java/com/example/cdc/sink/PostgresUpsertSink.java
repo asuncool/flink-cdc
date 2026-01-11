@@ -173,7 +173,7 @@ public class PostgresUpsertSink {
     return cols.stream().map(this::quoteIdent).toList();
   }
   private String quoteIdent(String ident) {
-    return "\"" + ident.replace("\"", "\\\"\\"") + "\"";
+    return "\"" + ident.replace("\"", "\\\"") + "\"";
   }
   private List<String> buildUpdateSet(List<String> targetCols, List<String> pks) {
     Set<String> pkSet = new HashSet<>(pks.stream().map(String::toLowerCase).toList());

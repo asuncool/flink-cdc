@@ -12,7 +12,7 @@
 
 - Spring Boot 3.3.5
 - MyBatis-Plus 3.5.6
-- MySQL 8.0
+- MySQL Connector/J 8.3.0 (com.mysql:mysql-connector-j)
 - Redis Stack (包含 Redis JSON 和 Redis Search 模块)
 - Jedis 5.0.2
 - Redisson 3.24.3

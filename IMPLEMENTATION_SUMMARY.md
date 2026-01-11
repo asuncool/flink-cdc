@@ -11,7 +11,7 @@
 ### 技术栈
 
 - **Spring Boot**: 3.3.5
-- **MySQL Driver**: 8.0.33
+- **MySQL Connector/J**: 8.3.0（已修复安全漏洞）
 - **MyBatis-Plus**: 3.5.6（用于 MySQL 操作）
 - **Jedis**: 5.0.2（Redis 客户端，支持 JSON 和 Search 模块）
 - **Gson**: 2.10.1（JSON 序列化）
@@ -295,6 +295,11 @@ $ mvn clean compile -DskipTests
    - MySQL 和 Redis 数据格式一致
    - JSON 序列化/反序列化正常
    - 中文字符正确处理
+
+4. **安全性验证**
+   - 已升级 MySQL Connector/J 至 8.3.0（修复漏洞）
+   - 原 mysql-connector-java 8.0.33 存在安全漏洞
+   - 新版本使用 com.mysql:mysql-connector-j 依赖
 
 ## 文档清单
 
